@@ -5,7 +5,7 @@ x-customizable-image: &customizable_image
   # By default the image used only contains the `frappe` and `erpnext` apps.
   # See https://github.com/frappe/frappe_docker/blob/main/docs/container-setup/02-build-setup.md#define-custom-apps
   # about using custom images.
-  image: ${CUSTOM_IMAGE:-frappe/erpnext}:${CUSTOM_TAG:-$ERPNEXT_VERSION}
+  image: ${CUSTOM_IMAGE:-frappe/erpnext}:${CUSTOM_TAG:-${ERPNEXT_VERSION:-latest}}
   pull_policy: ${PULL_POLICY:-always}
   restart: ${RESTART_POLICY:-unless-stopped}
 
@@ -58,7 +58,7 @@ services:
       - 'PORT_WEB=${PORT_WEB:-80}'
       - 'BACKEND=${BACKEND:-backend:8000}'
       - 'SOCKETIO=${SOCKETIO:-websocket:9000}'
-      - 'FRAPPE_SITE_NAME_HEADER=${FRAPPE_SITE_NAME_HEADER:-$$host}'
+      - 'FRAPPE_SITE_NAME_HEADER=${FRAPPE_SITE_NAME_HEADER:-host}'
       - 'UPSTREAM_REAL_IP_ADDRESS=${UPSTREAM_REAL_IP_ADDRESS:-127.0.0.1}'
       - 'UPSTREAM_REAL_IP_HEADER=${UPSTREAM_REAL_IP_HEADER:-X-Forwarded-For}'
       - 'UPSTREAM_REAL_IP_RECURSIVE=${UPSTREAM_REAL_IP_RECURSIVE:-off}'
