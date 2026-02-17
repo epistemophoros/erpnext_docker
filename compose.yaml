@@ -1,11 +1,5 @@
-# Coolify: env vars in list form (- 'KEY=${KEY:-default}') so Coolify can inject when needed.
-# Set SITE_NAME, ADMIN_PASSWORD, DB_PASSWORD for automatic default site creation.
-# In Coolify set FRAPPE_SITE_NAME_HEADER=host (not $host, or leave unset) to avoid "host variable is not set" warning.
-# Internal defaults: DB/Redis/socket use same-stack service names; mariadb, redis-* run in this stack.
+# Coolify: env in list form (- 'KEY=${KEY:-default}'). SITE_NAME, ADMIN_PASSWORD, DB_PASSWORD for auto site. FRAPPE_SITE_NAME_HEADER=host (not $host).
 x-customizable-image: &customizable_image
-  # By default the image used only contains the `frappe` and `erpnext` apps.
-  # See https://github.com/frappe/frappe_docker/blob/main/docs/container-setup/02-build-setup.md#define-custom-apps
-  # about using custom images.
   image: ${CUSTOM_IMAGE:-frappe/erpnext}:${CUSTOM_TAG:-${ERPNEXT_VERSION:-latest}}
   pull_policy: ${PULL_POLICY:-always}
   restart: ${RESTART_POLICY:-unless-stopped}
@@ -64,18 +58,18 @@ services:
   configurator:
     <<: *backend_defaults
     platform: linux/amd64
-    entrypoint:
-      - bash
-      - -c
+    working_dir: /home/frappe/frappe-bench
+    entrypoint: ["bash", "-c"]
     command:
       - >
+        B=/home/frappe/frappe-bench/env/bin/bench;
         ls -1 apps > sites/apps.txt;
-        bench set-config -g db_host $$DB_HOST;
-        bench set-config -gp db_port $$DB_PORT;
-        bench set-config -g redis_cache "redis://$$REDIS_CACHE";
-        bench set-config -g redis_queue "redis://$$REDIS_QUEUE";
-        bench set-config -g redis_socketio "redis://$$REDIS_QUEUE";
-        bench set-config -gp socketio_port $$SOCKETIO_PORT;
+        $$B set-config -g db_host $$DB_HOST;
+        $$B set-config -gp db_port $$DB_PORT;
+        $$B set-config -g redis_cache "redis://$$REDIS_CACHE";
+        $$B set-config -g redis_queue "redis://$$REDIS_QUEUE";
+        $$B set-config -g redis_socketio "redis://$$REDIS_QUEUE";
+        $$B set-config -gp socketio_port $$SOCKETIO_PORT;
     environment:
       - 'DB_HOST=${DB_HOST:-mariadb}'
       - 'DB_PORT=${DB_PORT:-3306}'
@@ -97,19 +91,11 @@ services:
       - sites:/home/frappe/frappe-bench/sites
     platform: linux/amd64
     working_dir: /home/frappe/frappe-bench
-    entrypoint:
-      - bash
-      - -c
+    entrypoint: ["bash", "-c"]
     command:
       - >
-        export PATH="/home/frappe/frappe-bench/env/bin:$$PATH";
-        if bench list-sites 2>/dev/null | grep -qFx "$$SITE_NAME"; then
-          echo "Site $$SITE_NAME exists, setting as default.";
-          bench set-default-site "$$SITE_NAME";
-        else
-          echo "Creating site $$SITE_NAME and installing ERPNext.";
-          bench new-site "$$SITE_NAME" --mariadb-user-host-login-scope='%' --admin-password "$$ADMIN_PASSWORD" --db-root-password "$$DB_PASSWORD" --install-app erpnext --set-default;
-        fi
+        B=/home/frappe/frappe-bench/env/bin/bench;
+        if $$B list-sites 2>/dev/null | grep -qFx "$$SITE_NAME"; then $$B set-default-site "$$SITE_NAME"; else $$B new-site "$$SITE_NAME" --mariadb-user-host-login-scope='%' --admin-password "$$ADMIN_PASSWORD" --db-root-password "$$DB_PASSWORD" --install-app erpnext --set-default; fi
     environment:
       - 'SITE_NAME=${SITE_NAME:-site1.local}'
       - 'ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}'
@@ -123,7 +109,6 @@ services:
     <<: *backend_defaults_after_site
     platform: linux/amd64
 
-  # Frontend (nginx): default site is created automatically by create-site service (env: SITE_NAME, ADMIN_PASSWORD, DB_PASSWORD).
   frontend:
     <<: *customizable_image
     platform: linux/amd64
@@ -133,7 +118,6 @@ services:
       - 'PORT_WEB=${PORT_WEB:-80}'
       - 'BACKEND=${BACKEND:-backend:8000}'
       - 'SOCKETIO=${SOCKETIO:-websocket:9000}'
-      # Set to "host" in Coolify (not $host); $host is expanded by compose and becomes empty.
       - 'FRAPPE_SITE_NAME_HEADER=${FRAPPE_SITE_NAME_HEADER:-host}'
       - 'UPSTREAM_REAL_IP_ADDRESS=${UPSTREAM_REAL_IP_ADDRESS:-127.0.0.1}'
       - 'UPSTREAM_REAL_IP_HEADER=${UPSTREAM_REAL_IP_HEADER:-X-Forwarded-For}'
@@ -178,7 +162,6 @@ services:
     platform: linux/amd64
     command: bench schedule
 
-# ERPNext requires local assets access (Frappe does not)
 volumes:
   sites:
   mariadb-data:
