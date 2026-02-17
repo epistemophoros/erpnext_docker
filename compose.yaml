@@ -1,6 +1,6 @@
 # Coolify: env vars in list form (- 'KEY=${KEY:-default}') so Coolify can inject when needed.
-# Set SITE_NAME (hostname to serve, e.g. your domain or site1.local), ADMIN_PASSWORD, DB_PASSWORD
-# for automatic default site creation. Backend/frontend start after create-site completes.
+# Set SITE_NAME, ADMIN_PASSWORD, DB_PASSWORD for automatic default site creation.
+# In Coolify set FRAPPE_SITE_NAME_HEADER=host (not $host, or leave unset) to avoid "host variable is not set" warning.
 # Internal defaults: DB/Redis/socket use same-stack service names; mariadb, redis-* run in this stack.
 x-customizable-image: &customizable_image
   # By default the image used only contains the `frappe` and `erpnext` apps.
@@ -96,22 +96,19 @@ services:
     volumes:
       - sites:/home/frappe/frappe-bench/sites
     platform: linux/amd64
+    working_dir: /home/frappe/frappe-bench
     entrypoint:
       - bash
       - -c
     command:
       - >
+        export PATH="/home/frappe/frappe-bench/env/bin:$$PATH";
         if bench list-sites 2>/dev/null | grep -qFx "$$SITE_NAME"; then
           echo "Site $$SITE_NAME exists, setting as default.";
           bench set-default-site "$$SITE_NAME";
         else
           echo "Creating site $$SITE_NAME and installing ERPNext.";
-          bench new-site "$$SITE_NAME"
-            --mariadb-user-host-login-scope='%'
-            --admin-password "$$ADMIN_PASSWORD"
-            --db-root-password "$$DB_PASSWORD"
-            --install-app erpnext
-            --set-default;
+          bench new-site "$$SITE_NAME" --mariadb-user-host-login-scope='%' --admin-password "$$ADMIN_PASSWORD" --db-root-password "$$DB_PASSWORD" --install-app erpnext --set-default;
         fi
     environment:
       - 'SITE_NAME=${SITE_NAME:-site1.local}'
