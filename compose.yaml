@@ -1,3 +1,5 @@
+# Coolify: env vars must be in service environment: blocks as list form (- 'KEY=${KEY:-default}')
+# so Coolify surfaces them under Application → Environment. No .env from repo is read.
 x-customizable-image: &customizable_image
   # By default the image used only contains the `frappe` and `erpnext` apps.
   # See https://github.com/frappe/frappe_docker/blob/main/docs/container-setup/02-build-setup.md#define-custom-apps
@@ -34,11 +36,11 @@ services:
         bench set-config -g redis_socketio "redis://$$REDIS_QUEUE";
         bench set-config -gp socketio_port $$SOCKETIO_PORT;
     environment:
-      DB_HOST: ${DB_HOST:-}
-      DB_PORT: ${DB_PORT:-}
-      REDIS_CACHE: ${REDIS_CACHE:-}
-      REDIS_QUEUE: ${REDIS_QUEUE:-}
-      SOCKETIO_PORT: 9000
+      - 'DB_HOST=${DB_HOST:-}'
+      - 'DB_PORT=${DB_PORT:-}'
+      - 'REDIS_CACHE=${REDIS_CACHE:-}'
+      - 'REDIS_QUEUE=${REDIS_QUEUE:-}'
+      - 'SOCKETIO_PORT=${SOCKETIO_PORT:-9000}'
     depends_on: {}
     restart: on-failure
 
@@ -52,14 +54,14 @@ services:
     command:
       - nginx-entrypoint.sh
     environment:
-      BACKEND: backend:8000
-      SOCKETIO: websocket:9000
-      FRAPPE_SITE_NAME_HEADER: ${FRAPPE_SITE_NAME_HEADER:-$$host}
-      UPSTREAM_REAL_IP_ADDRESS: ${UPSTREAM_REAL_IP_ADDRESS:-127.0.0.1}
-      UPSTREAM_REAL_IP_HEADER: ${UPSTREAM_REAL_IP_HEADER:-X-Forwarded-For}
-      UPSTREAM_REAL_IP_RECURSIVE: ${UPSTREAM_REAL_IP_RECURSIVE:-off}
-      PROXY_READ_TIMEOUT: ${PROXY_READ_TIMEOUT:-120}
-      CLIENT_MAX_BODY_SIZE: ${CLIENT_MAX_BODY_SIZE:-50m}
+      - 'BACKEND=${BACKEND:-backend:8000}'
+      - 'SOCKETIO=${SOCKETIO:-websocket:9000}'
+      - 'FRAPPE_SITE_NAME_HEADER=${FRAPPE_SITE_NAME_HEADER:-$$host}'
+      - 'UPSTREAM_REAL_IP_ADDRESS=${UPSTREAM_REAL_IP_ADDRESS:-127.0.0.1}'
+      - 'UPSTREAM_REAL_IP_HEADER=${UPSTREAM_REAL_IP_HEADER:-X-Forwarded-For}'
+      - 'UPSTREAM_REAL_IP_RECURSIVE=${UPSTREAM_REAL_IP_RECURSIVE:-off}'
+      - 'PROXY_READ_TIMEOUT=${PROXY_READ_TIMEOUT:-120}'
+      - 'CLIENT_MAX_BODY_SIZE=${CLIENT_MAX_BODY_SIZE:-50m}'
     volumes:
       - sites:/home/frappe/frappe-bench/sites
     depends_on:
