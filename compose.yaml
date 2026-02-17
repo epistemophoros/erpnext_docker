@@ -1,6 +1,7 @@
 # Coolify: env vars in list form (- 'KEY=${KEY:-default}') so Coolify can inject when needed.
-# Internal defaults below: DB/Redis/socket use default ports and same-stack service names.
-# mariadb, redis-cache, redis-queue run in this stack so hostnames resolve on the same network.
+# Set SITE_NAME (hostname to serve, e.g. your domain or site1.local), ADMIN_PASSWORD, DB_PASSWORD
+# for automatic default site creation. Backend/frontend start after create-site completes.
+# Internal defaults: DB/Redis/socket use same-stack service names; mariadb, redis-* run in this stack.
 x-customizable-image: &customizable_image
   # By default the image used only contains the `frappe` and `erpnext` apps.
   # See https://github.com/frappe/frappe_docker/blob/main/docs/container-setup/02-build-setup.md#define-custom-apps
@@ -14,8 +15,18 @@ x-depends-on-configurator: &depends_on_configurator
     configurator:
       condition: service_completed_successfully
 
+x-depends-on-create-site: &depends_on_create_site
+  depends_on:
+    create-site:
+      condition: service_completed_successfully
+
 x-backend-defaults: &backend_defaults
   <<: [*depends_on_configurator, *customizable_image]
+  volumes:
+    - sites:/home/frappe/frappe-bench/sites
+
+x-backend-defaults-after-site: &backend_defaults_after_site
+  <<: [*depends_on_create_site, *customizable_image]
   volumes:
     - sites:/home/frappe/frappe-bench/sites
 
@@ -80,13 +91,42 @@ services:
         condition: service_started
     restart: on-failure
 
+  create-site:
+    <<: [*depends_on_configurator, *customizable_image]
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+    platform: linux/amd64
+    entrypoint:
+      - bash
+      - -c
+    command:
+      - >
+        if bench list-sites 2>/dev/null | grep -qFx "$$SITE_NAME"; then
+          echo "Site $$SITE_NAME exists, setting as default.";
+          bench set-default-site "$$SITE_NAME";
+        else
+          echo "Creating site $$SITE_NAME and installing ERPNext.";
+          bench new-site "$$SITE_NAME"
+            --mariadb-user-host-login-scope='%'
+            --admin-password "$$ADMIN_PASSWORD"
+            --db-root-password "$$DB_PASSWORD"
+            --install-app erpnext
+            --set-default;
+        fi
+    environment:
+      - 'SITE_NAME=${SITE_NAME:-site1.local}'
+      - 'ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}'
+      - 'DB_PASSWORD=${DB_PASSWORD:-123}'
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+    restart: "no"
+
   backend:
-    <<: *backend_defaults
+    <<: *backend_defaults_after_site
     platform: linux/amd64
 
-  # Frontend (nginx): needs a default site for / to respond. Create one in backend:
-  #   bench new-site <hostname> --mariadb-user-host-login-scope='%' --admin-password=admin --db-root-password=$DB_PASSWORD
-  #   bench set-default-site <hostname>
+  # Frontend (nginx): default site is created automatically by create-site service (env: SITE_NAME, ADMIN_PASSWORD, DB_PASSWORD).
   frontend:
     <<: *customizable_image
     platform: linux/amd64
@@ -118,7 +158,7 @@ services:
       - websocket
 
   websocket:
-    <<: [*depends_on_configurator, *customizable_image]
+    <<: [*depends_on_create_site, *customizable_image]
     platform: linux/amd64
     command:
       - node
@@ -127,17 +167,17 @@ services:
       - sites:/home/frappe/frappe-bench/sites
 
   queue-short:
-    <<: *backend_defaults
+    <<: *backend_defaults_after_site
     platform: linux/amd64
     command: bench worker --queue short,default
 
   queue-long:
-    <<: *backend_defaults
+    <<: *backend_defaults_after_site
     platform: linux/amd64
     command: bench worker --queue long,default,short
 
   scheduler:
-    <<: *backend_defaults
+    <<: *backend_defaults_after_site
     platform: linux/amd64
     command: bench schedule
 
