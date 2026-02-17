@@ -84,6 +84,9 @@ services:
     <<: *backend_defaults
     platform: linux/amd64
 
+  # Frontend (nginx): needs a default site for / to respond. Create one in backend:
+  #   bench new-site <hostname> --mariadb-user-host-login-scope='%' --admin-password=admin --db-root-password=$DB_PASSWORD
+  #   bench set-default-site <hostname>
   frontend:
     <<: *customizable_image
     platform: linux/amd64
@@ -100,6 +103,12 @@ services:
       - 'UPSTREAM_REAL_IP_RECURSIVE=${UPSTREAM_REAL_IP_RECURSIVE:-off}'
       - 'PROXY_READ_TIMEOUT=${PROXY_READ_TIMEOUT:-120}'
       - 'CLIENT_MAX_BODY_SIZE=${CLIENT_MAX_BODY_SIZE:-50m}'
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import socket; s=socket.socket(); s.settimeout(2); s.connect(('127.0.0.1',80)); s.close()\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     ports:
       - '${PORT_WEB:-80}:80'
     volumes:
