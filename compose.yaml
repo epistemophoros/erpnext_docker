@@ -1,6 +1,6 @@
 # Coolify: env vars in list form (- 'KEY=${KEY:-default}') so Coolify can inject when needed.
 # Internal defaults below: DB/Redis/socket use default ports and same-stack service names.
-# Only set DB_* / REDIS_* in Coolify when using an external database or Redis.
+# mariadb, redis-cache, redis-queue run in this stack so hostnames resolve on the same network.
 x-customizable-image: &customizable_image
   # By default the image used only contains the `frappe` and `erpnext` apps.
   # See https://github.com/frappe/frappe_docker/blob/main/docs/container-setup/02-build-setup.md#define-custom-apps
@@ -20,13 +20,42 @@ x-backend-defaults: &backend_defaults
     - sites:/home/frappe/frappe-bench/sites
 
 services:
+  mariadb:
+    image: mariadb:11.8
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      start_period: 5s
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: ${RESTART_POLICY:-unless-stopped}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --skip-character-set-client-handshake
+      - --skip-innodb-read-only-compressed
+    environment:
+      - 'MYSQL_ROOT_PASSWORD=${DB_PASSWORD:-123}'
+      - 'MARIADB_AUTO_UPGRADE=${MARIADB_AUTO_UPGRADE:-1}'
+    volumes:
+      - mariadb-data:/var/lib/mysql
+
+  redis-cache:
+    image: redis:6.2-alpine
+    restart: ${RESTART_POLICY:-unless-stopped}
+
+  redis-queue:
+    image: redis:6.2-alpine
+    restart: ${RESTART_POLICY:-unless-stopped}
+    volumes:
+      - redis-queue-data:/data
+
   configurator:
     <<: *backend_defaults
     platform: linux/amd64
     entrypoint:
       - bash
       - -c
-    # add redis_socketio for backward compatibility
     command:
       - >
         ls -1 apps > sites/apps.txt;
@@ -42,7 +71,13 @@ services:
       - 'REDIS_CACHE=${REDIS_CACHE:-redis-cache:6379}'
       - 'REDIS_QUEUE=${REDIS_QUEUE:-redis-queue:6379}'
       - 'SOCKETIO_PORT=${SOCKETIO_PORT:-9000}'
-    depends_on: {}
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis-cache:
+        condition: service_started
+      redis-queue:
+        condition: service_started
     restart: on-failure
 
   backend:
@@ -99,3 +134,5 @@ services:
 # ERPNext requires local assets access (Frappe does not)
 volumes:
   sites:
+  mariadb-data:
+  redis-queue-data:
