@@ -95,14 +95,31 @@ services:
     command:
       - >
         B=/usr/local/bin/bench;
+        wait-for-it -t 120 "$$DB_HOST:$$DB_PORT";
+        wait-for-it -t 120 redis-cache:6379;
+        wait-for-it -t 120 redis-queue:6379;
+        start=$$(date +%s);
+        until grep -qs . sites/common_site_config.json 2>/dev/null && [ -n "$$(jq -r '.db_host // empty' sites/common_site_config.json 2>/dev/null)" ]; do
+          echo "Waiting for sites/common_site_config.json";
+          sleep 5;
+          if [ $$(($$(date +%s)-start)) -gt 120 ]; then echo "common_site_config.json not ready"; exit 1; fi;
+        done;
         if $$B list-sites 2>/dev/null | grep -qFx "$$SITE_NAME"; then $$B set-default-site "$$SITE_NAME"; else $$B new-site "$$SITE_NAME" --mariadb-user-host-login-scope='%' --admin-password "$$ADMIN_PASSWORD" --db-root-password "$$DB_PASSWORD" --install-app erpnext --set-default; fi
     environment:
       - 'SITE_NAME=${SITE_NAME:-site1.local}'
       - 'ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}'
       - 'DB_PASSWORD=${DB_PASSWORD:-123}'
+      - 'DB_HOST=${DB_HOST:-mariadb}'
+      - 'DB_PORT=${DB_PORT:-3306}'
     depends_on:
       configurator:
         condition: service_completed_successfully
+      mariadb:
+        condition: service_healthy
+      redis-cache:
+        condition: service_started
+      redis-queue:
+        condition: service_started
     restart: "no"
 
   backend:
